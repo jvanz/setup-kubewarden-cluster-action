@@ -27,7 +27,7 @@ inputs:
     description: "Define the policy server container image tag"
     type: string
     required: false
-    default: "v0.2.5"
+    default: "latest"
   policy-server-container-image-artifact:
     description: "Load the policy server image used in the deployment from local artifact"
     required: false
@@ -98,13 +98,24 @@ runs:
     - name: "Install Kubewarden CRDS"
       run: helm upgrade --install --wait --namespace kubewarden --create-namespace kubewarden-crds kubewarden/kubewarden-crds
       shell: bash
+    - name: "Generate the Kubewarden chart values"
+      run: cp kubewarden-values-template.yaml /tmp/kubewarden-values.yaml
+      shell: bash
+    - name: "Generate Kubewarden chart values"
+      uses: mikefarah/yq@v4.16.1
+      with:
+        cmd: yq -y --in-place '\
+            .image.repository = "${{ inputs.controller-image-repository }}" \
+          | .image.tag = "${{ inputs.controller-image-tag }}" \
+          | .policyServer.image.repository = "${{inputs.policy-server-repository}}" \
+          | .policyServer.image.tag = "${{inputs.policy-server-tag}}"' \
+        /tmp/kubewarden-values.yaml
+    - run: cat /tmp/kubewarden-values.yaml
+      shell: bash
     - name: "Install Kubewarden controller"
       run: |
         helm upgrade --install --wait \
-          --set image.repository=${{ inputs.controller-image-repository }} \
-          --set image.tag=${{ inputs.controller-image-tag }} \
-          --set policyServer.image.repository=${{ inputs.policy-server-repository }} \
-          --set policyServer.image.tag=${{ inputs.policy-server-tag }} \
+          --values /tmp/kubewarden-values.yaml
           --namespace kubewarden \
           kubewarden-controller kubewarden/kubewarden-controller
       shell: bash
